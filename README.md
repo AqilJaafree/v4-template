@@ -1,100 +1,97 @@
-# v4-template
-### **A template for writing Uniswap v4 Hooks 🦄**
+# Cross-Pool Operations in Uniswap v4
 
-[`Use this Template`](https://github.com/uniswapfoundation/v4-template/generate)
+This project implements cross-pool operations using Uniswap v4 hooks, enabling sophisticated trading strategies that trigger actions across multiple pools in a single transaction.
 
-1. The example hook [Counter.sol](src/Counter.sol) demonstrates the `beforeSwap()` and `afterSwap()` hooks
-2. The test template [Counter.t.sol](test/Counter.t.sol) preconfigures the v4 pool manager, test tokens, and test liquidity.
+## Overview
 
-<details>
-<summary>Updating to v4-template:latest</summary>
+The `CrossPoolHook` allows swaps in one pool to automatically trigger related swaps in another pool based on configurable thresholds and custom strategies. This enables advanced trading patterns, arbitrage opportunities, and liquidity balancing across multiple token pairs.
 
-This template is actively maintained -- you can update the v4 dependencies, scripts, and helpers: 
+## Key Features
+
+- **Pool Linking**: Create explicit connections between any two Uniswap v4 pools
+- **Threshold-Based Triggers**: Configure minimum swap amounts that activate cross-pool actions
+- **Cooldown Periods**: Prevent excessive operations with time-based rate limiting
+- **Customizable Strategies**: Flexible logic for determining swap direction and amounts
+- **Error Handling**: Graceful handling of failed cross-pool operations
+
+## How It Works
+
+1. A swap occurs in a source pool that exceeds the configured threshold
+2. The hook detects this swap and determines if the cooldown period has passed
+3. If conditions are met, the hook executes a related swap in the target pool
+4. All operations happen within a single transaction, ensuring atomicity
+
+## Implementation Details
+
+The hook consists of several key components:
+
+- `crossPoolLinks`: Maps source pools to their target pools
+- `thresholds`: Stores minimum swap amounts for triggering cross-pool actions
+- `lastActionTimestamp`: Tracks when each pool last triggered an action
+- `_determineTargetSwapDirection()`: Logic that decides swap direction based on token relationships
+- `_calculateTargetSwapAmount()`: Strategy for determining swap amount in target pool
+
+## Example Use Cases
+
+- **Arbitrage**: Automatically balance prices between related pools
+- **Liquidity Management**: Distribute trading volume across pools with shared tokens
+- **Risk Hedging**: Create protective positions in correlated assets
+- **Complex Trading Paths**: Execute multi-token strategies in a single transaction
+
+## Getting Started
+
+### Prerequisites
+
+- Forge/Foundry
+- Uniswap v4 dependencies
+
+### Installation
+
 ```bash
-git remote add template https://github.com/uniswapfoundation/v4-template
-git fetch template
-git merge template/main <BRANCH> --allow-unrelated-histories
-```
-
-</details>
-
----
-
-### Check Forge Installation
-*Ensure that you have correctly installed Foundry (Forge) Stable. You can update Foundry by running:*
-
-```
-foundryup
-```
-
-> *v4-template* appears to be _incompatible_ with Foundry Nightly. See [foundry announcements](https://book.getfoundry.sh/announcements) to revert back to the stable build
-
-
-
-## Set up
-
-*requires [foundry](https://book.getfoundry.sh)*
-
-```
+git clone https://github.com/yourusername/uniswap-v4-cross-pool
+cd uniswap-v4-cross-pool
 forge install
-forge test
 ```
 
-### Local Development (Anvil)
-
-Other than writing unit tests (recommended!), you can only deploy & test hooks on [anvil](https://book.getfoundry.sh/anvil/)
+### Running Tests
 
 ```bash
-# start anvil, a local EVM chain
-anvil
+forge test -vvv
+```
 
-# in a new terminal
+### Deployment
+
+Deploy to Anvil (local testnet):
+
+```bash
 forge script script/Anvil.s.sol \
     --rpc-url http://localhost:8545 \
     --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
     --broadcast
 ```
 
-See [script/](script/) for hook deployment, pool creation, liquidity provision, and swapping.
+## Advanced Configuration
 
----
+### Creating Pool Links
 
-<details>
-<summary><h2>Troubleshooting</h2></summary>
+```solidity
+// Link Pool A to Pool B with a threshold of 0.1 tokens
+hook.createCrossPoolLink(poolKeyA, poolKeyB, 1e17);
+```
 
+### Customizing Strategies
 
+The hook allows for customization of two key strategy components:
 
-### *Permission Denied*
+1. **Swap Direction**: Modify `_determineTargetSwapDirection()` to change how the hook decides whether to swap zeroForOne or oneForZero in the target pool.
 
-When installing dependencies with `forge install`, Github may throw a `Permission Denied` error
+2. **Swap Amount**: Customize `_calculateTargetSwapAmount()` to implement more sophisticated strategies for determining how much to swap in the target pool.
 
-Typically caused by missing Github SSH keys, and can be resolved by following the steps [here](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh) 
+## License
 
-Or [adding the keys to your ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent), if you have already uploaded SSH keys
+MIT
 
-### Hook deployment failures
+## Acknowledgments
 
-Hook deployment failures are caused by incorrect flags or incorrect salt mining
-
-1. Verify the flags are in agreement:
-    * `getHookCalls()` returns the correct flags
-    * `flags` provided to `HookMiner.find(...)`
-2. Verify salt mining is correct:
-    * In **forge test**: the *deployer* for: `new Hook{salt: salt}(...)` and `HookMiner.find(deployer, ...)` are the same. This will be `address(this)`. If using `vm.prank`, the deployer will be the pranking address
-    * In **forge script**: the deployer must be the CREATE2 Proxy: `0x4e59b44847b379578588920cA78FbF26c0B4956C`
-        * If anvil does not have the CREATE2 deployer, your foundry may be out of date. You can update it with `foundryup`
-
-</details>
-
----
-
-Additional resources:
-
-[Uniswap v4 docs](https://docs.uniswap.org/contracts/v4/overview)
-
-[v4-periphery](https://github.com/uniswap/v4-periphery) contains advanced hook implementations that serve as a great reference
-
-[v4-core](https://github.com/uniswap/v4-core)
-
-[v4-by-example](https://v4-by-example.org)
-
+- Uniswap Foundation for the v4-template
+- Contributors to the Uniswap v4 core and periphery repositories
