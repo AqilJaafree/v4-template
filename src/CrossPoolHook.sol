@@ -106,9 +106,11 @@ contract CrossPoolHook is BaseHook {
         // Get absolute swap amount
         uint256 swapAmount;
         if (params.zeroForOne) {
-            swapAmount = uint256(int256(delta.amount0()));
+            int256 amount0 = int256(delta.amount0());
+            swapAmount = amount0 < 0 ? uint256(-amount0) : uint256(amount0);
         } else {
-            swapAmount = uint256(int256(delta.amount1()));
+            int256 amount1 = int256(delta.amount1());
+            swapAmount = amount1 < 0 ? uint256(-amount1) : uint256(amount1);
         }
         
         // Check if the swap amount exceeds the threshold and cooldown period has passed
@@ -130,15 +132,12 @@ contract CrossPoolHook is BaseHook {
      * @dev This is an internal function that contains the cross-pool strategy logic
      */
     function _executeCrossPoolAction(
-        address /* sender */,
-        PoolKey calldata sourceKey,
-        PoolKey memory targetKey,
-        IPoolManager.SwapParams calldata params,
-        BalanceDelta delta
+    address sender,
+    PoolKey calldata sourceKey,
+    PoolKey memory targetKey,
+    IPoolManager.SwapParams calldata params,
+    BalanceDelta delta
     ) internal {
-        // Example cross-pool strategy logic:
-        // When a large swap occurs in source pool, execute a swap in the target pool
-        
         // Determine if the target swap should be zeroForOne based on source swap & pool relationships
         bool targetZeroForOne = _determineTargetSwapDirection(sourceKey, targetKey, params.zeroForOne);
         
@@ -152,18 +151,59 @@ contract CrossPoolHook is BaseHook {
             sqrtPriceLimitX96: targetZeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
         
+        // Get the input currency for the target swap
+        (Currency inputCurrency, Currency outputCurrency) = targetZeroForOne 
+            ? (targetKey.currency0, targetKey.currency1)
+            : (targetKey.currency1, targetKey.currency0);
+        
+        // For exact input swaps (negative amountSpecified), we need to provide tokens to the pool
+        if (targetSwapAmount < 0) {
+            // Calculate the exact amount needed (taking absolute value of negative amount)
+            uint256 inputAmount = uint256(-targetSwapAmount);
+            
+            // First, we need to take tokens from the pool manager to the hook
+            // This is necessary because the hook needs tokens to perform the cross-pool swap
+            // To fund this, we take from the output of the original swap if possible
+            // Get tokens from the original swap output if available
+            if (params.zeroForOne && targetKey.currency1 == sourceKey.currency1) {
+                // If we're swapping 0->1 and target pool shares token1, take from that
+                poolManager.take(sourceKey.currency1, address(this), inputAmount);
+            } else if (!params.zeroForOne && targetKey.currency0 == sourceKey.currency0) {
+                // If we're swapping 1->0 and target pool shares token0, take from that
+                poolManager.take(sourceKey.currency0, address(this), inputAmount);
+            } else {
+                // Otherwise, we need to use arbitrary tokens owned by the hook
+                // This would require pre-funding the hook with tokens
+                // In a production environment, you would need a more sophisticated approach
+                
+                // No-op here as this is just a demonstration
+                // In reality, this would likely involve external swap or reserves
+            }
+        }
+        
         // Execute the swap in the target pool with error handling
         try poolManager.swap(targetKey, targetParams, "") returns (BalanceDelta targetDelta) {
-            // Emit event only if the swap succeeds
+            // Calculate the output amount
+            int256 outputAmount = targetZeroForOne ? targetDelta.amount1() : targetDelta.amount0();
+            
+            // Only process positive output amounts
+            if (outputAmount > 0) {
+                // Calculate the absolute output amount
+                uint256 absOutputAmount = uint256(outputAmount);
+                
+                // Take the output tokens to send back to the original sender
+                poolManager.take(outputCurrency, sender, absOutputAmount);
+            }
+            
+            // Emit event with the swap details
             emit CrossPoolActionExecuted(
                 sourceKey.toId(),
                 targetKey.toId(),
                 targetSwapAmount,
-                targetZeroForOne ? targetDelta.amount1() : targetDelta.amount0()
+                outputAmount
             );
         } catch (bytes memory) {
-            // If the swap fails (e.g. pool doesn't exist, insufficient liquidity),
-            // we'll silently continue without reverting the entire transaction
+            // If the swap fails, silently continue
             // In a production environment, you might want to log this failure
         }
     }
@@ -222,13 +262,13 @@ contract CrossPoolHook is BaseHook {
         
         int256 sourceAmount;
         if (sourceParams.zeroForOne) {
-            sourceAmount = sourceDelta.amount0();
+            sourceAmount = int256(sourceDelta.amount0());
         } else {
-            sourceAmount = sourceDelta.amount1();
+            sourceAmount = int256(sourceDelta.amount1());
         }
         
         // Take the absolute value, calculate percentage, then apply sign
-        uint256 absAmount = uint256(sourceAmount < 0 ? -sourceAmount : sourceAmount);
+        uint256 absAmount = sourceAmount < 0 ? uint256(-sourceAmount) : uint256(sourceAmount);
         uint256 targetAmount = (absAmount * swapPercentage) / 100;
         
         // Check if we need exact input (negative) or exact output (positive)
