@@ -179,10 +179,9 @@ contract DynamicFeeHook is BaseHook {
     /**
      * @notice Calculate dynamic fee based on market conditions
      * @param key Pool key
-     * @param params Swap parameters
      * @return Fee tier to apply for this swap
      */
-    function calculateDynamicFee(PoolKey calldata key, IPoolManager.SwapParams calldata params) 
+    function calculateDynamicFee(PoolKey calldata key, IPoolManager.SwapParams calldata /* params */) 
         internal 
         view 
         returns (uint24) 
@@ -251,10 +250,9 @@ contract DynamicFeeHook is BaseHook {
     /**
      * @notice Calculate swap volume in USD
      * @param params Swap parameters
-     * @param delta Balance delta from the swap
      * @return Volume in USD (scaled by 1e18)
      */
-    function calculateSwapVolume(IPoolManager.SwapParams calldata params, BalanceDelta delta) 
+    function calculateSwapVolume(IPoolManager.SwapParams calldata params, BalanceDelta /* delta */) 
         internal 
         pure 
         returns (uint256) 
